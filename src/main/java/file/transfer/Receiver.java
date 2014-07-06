@@ -26,9 +26,6 @@ public class Receiver {
 	
 public static final int AES_Key_Size = 256;
 	
-	Cipher pkCipher, aesCipher;
-	byte[] aesKey;
-	SecretKeySpec aeskeySpec;
 	public static void main(String[] args) throws IOException, GeneralSecurityException{
 		Receiver server = new Receiver();
 		String savePath = "/home/maduranga/Desktop/";
@@ -37,6 +34,64 @@ public static final int AES_Key_Size = 256;
 		server.procedure(savePath, privateKeyFile, port);
 		
 	}
+	Cipher pkCipher, aesCipher;
+	byte[] aesKey;
+	SecretKeySpec aeskeySpec;
+	
+	public Receiver() throws GeneralSecurityException {
+		// create RSA public key cipher
+		pkCipher = Cipher.getInstance("RSA");
+	    // create AES shared key cipher
+	    aesCipher = Cipher.getInstance("AES");
+	}
+	
+	/**
+	 * Copies a stream.
+	 */
+	private void copy(InputStream is, OutputStream os) throws IOException {
+		int i;
+		byte[] b = new byte[1024];
+		while((i=is.read(b))!=-1) {
+			os.write(b, 0, i);
+		}
+	}
+	
+	/**
+	 * Decrypts and then copies the contents of a given file.
+	 */
+	public void decrypt(File in, File out) throws IOException, InvalidKeyException {
+		aesCipher.init(Cipher.DECRYPT_MODE, aeskeySpec);
+		
+		CipherInputStream is = new CipherInputStream(new FileInputStream(in), aesCipher);
+		FileOutputStream os = new FileOutputStream(out);
+		
+		copy(is, os);
+		
+		is.close();
+		os.close();
+	}
+	
+
+	/**
+	 * Decrypts an AES key from a file using an RSA private key
+	 */
+	public void loadKey(File in, File privateKeyFile) throws GeneralSecurityException, IOException {
+		// read private key to be used to decrypt the AES key
+		byte[] encodedKey = new byte[(int)privateKeyFile.length()];
+		new FileInputStream(privateKeyFile).read(encodedKey);
+		
+		// create private key
+		PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(encodedKey);
+		KeyFactory kf = KeyFactory.getInstance("RSA");
+		PrivateKey pk = kf.generatePrivate(privateKeySpec);
+		
+		// read AES key
+		pkCipher.init(Cipher.DECRYPT_MODE, pk);
+		aesKey = new byte[AES_Key_Size/8];
+		CipherInputStream is = new CipherInputStream(new FileInputStream(in), pkCipher);
+		is.read(aesKey);
+		aeskeySpec = new SecretKeySpec(aesKey, "AES");
+	}
 	
 	public void procedure(String savePath, String privateKeyFile, String port) throws IOException, GeneralSecurityException{
 		if(!savePath.endsWith("/")){
@@ -44,14 +99,15 @@ public static final int AES_Key_Size = 256;
 		}
 		
 		ServerSocket server_socket = new ServerSocket(Integer.parseInt(port));
-
 		Socket socket = server_socket.accept();
 		
+		//creating the temporary folder to save the data until they are decrypted
 		DataInputStream dis = new DataInputStream(socket.getInputStream());
 		String folder = savePath+"tmp/";
 		File dirBase = new File(folder);
 		dirBase.mkdir();
 		
+		//reading the data from the network and save in the temporary location
 		String fileName = dis.readUTF();
 		File in = new File(folder+fileName);
 		readFile(in, dis);
@@ -62,10 +118,12 @@ public static final int AES_Key_Size = 256;
 		File encryptedKey = new File(folder+"encryptedKey");
 		readFile(encryptedKey, dis);
 
+		//closing the network and associated streams
 		dis.close();
 		server_socket.close();
 		socket.close();
 		
+		//decrypting the data received over the network using the private key of the user
 		File privateKey = new File(privateKeyFile);
 		loadKey(encryptedKey, privateKey);
 		File out = new File(savePath+fileName);
@@ -75,6 +133,7 @@ public static final int AES_Key_Size = 256;
 		File hash = new File(folder+"hash"); 
 		decrypt(encryptedHash, hash);
 
+		//calculating the hash value of the decrypted file and comparing with the received hash value.
 		MessageDigest md = MessageDigest.getInstance("MD5");
 		DigestInputStream digis = new DigestInputStream(new FileInputStream(out), md);
 		byte[] buffer = md.digest();
@@ -92,6 +151,7 @@ public static final int AES_Key_Size = 256;
 			out.delete();
 		}
 		
+		//deleting the temporary folders and files
 		in.delete();
 		encryptedKey.delete();
 		encryptedHash.delete();
@@ -99,6 +159,9 @@ public static final int AES_Key_Size = 256;
 		dirBase.delete();
 	}
 	
+	/*
+	 * reading the file from the network and store them in files.
+	 * */
 	public void readFile(File file, DataInputStream dis) throws IOException{
 		FileOutputStream output = new FileOutputStream(file);
 		long len = dis.readLong();
@@ -126,60 +189,5 @@ public static final int AES_Key_Size = 256;
         
         System.out.println("File successfully received!");
 				
-	}
-	
-	public Receiver() throws GeneralSecurityException {
-		// create RSA public key cipher
-		pkCipher = Cipher.getInstance("RSA");
-	    // create AES shared key cipher
-	    aesCipher = Cipher.getInstance("AES");
-	}
-	
-
-	/**
-	 * Decrypts an AES key from a file using an RSA private key
-	 */
-	public void loadKey(File in, File privateKeyFile) throws GeneralSecurityException, IOException {
-		// read private key to be used to decrypt the AES key
-		byte[] encodedKey = new byte[(int)privateKeyFile.length()];
-		new FileInputStream(privateKeyFile).read(encodedKey);
-		
-		// create private key
-		PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(encodedKey);
-		KeyFactory kf = KeyFactory.getInstance("RSA");
-		PrivateKey pk = kf.generatePrivate(privateKeySpec);
-		
-		// read AES key
-		pkCipher.init(Cipher.DECRYPT_MODE, pk);
-		aesKey = new byte[AES_Key_Size/8];
-		CipherInputStream is = new CipherInputStream(new FileInputStream(in), pkCipher);
-		is.read(aesKey);
-		aeskeySpec = new SecretKeySpec(aesKey, "AES");
-	}
-	
-	/**
-	 * Decrypts and then copies the contents of a given file.
-	 */
-	public void decrypt(File in, File out) throws IOException, InvalidKeyException {
-		aesCipher.init(Cipher.DECRYPT_MODE, aeskeySpec);
-		
-		CipherInputStream is = new CipherInputStream(new FileInputStream(in), aesCipher);
-		FileOutputStream os = new FileOutputStream(out);
-		
-		copy(is, os);
-		
-		is.close();
-		os.close();
-	}
-	
-	/**
-	 * Copies a stream.
-	 */
-	private void copy(InputStream is, OutputStream os) throws IOException {
-		int i;
-		byte[] b = new byte[1024];
-		while((i=is.read(b))!=-1) {
-			os.write(b, 0, i);
-		}
 	}
 }

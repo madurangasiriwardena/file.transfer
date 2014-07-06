@@ -18,7 +18,7 @@ public class FileEncryptDecrypt {
 			System.out.println("To generate keys");
 			System.out.println("-k <File to save public key> <File to save private key>");
 			System.out.println("\nTo receive a file");
-			System.out.println("-r <Private key input file> <File to save downloaded file> <Listening port>");
+			System.out.println("-r <Private key input file> <Location to save downloaded file> <Listening port>");
 			System.out.println("\nTo send a file");
 			System.out.println("-s <Public key input file> <File to send> <Host to connect> <Port to connect>");
 

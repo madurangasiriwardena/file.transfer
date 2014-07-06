@@ -33,7 +33,7 @@ public class Sender {
 	        FileInputStream input = new FileInputStream(file);
 	        dos.writeLong(file.length());
 	        System.out.println(file.length());
-	        System.out.println(file.getAbsolutePath());
+	        System.out.println(file.getName());
 	        int read = 0;
 	        
 	        byte[] buffer = new byte[1024];
@@ -61,6 +61,8 @@ public class Sender {
 		File dirBase = new File(folder);
 		dirBase.mkdir();
 		makeKey();
+		
+		//save the encrypted data into a temporary folder until it is sent
 		File encryptedKey = new File(folder + "encryptedKey");
 		File publicKeyFile = new File(publicKeyInputFile);
 		saveKey(encryptedKey, publicKeyFile);
@@ -69,6 +71,7 @@ public class Sender {
 		File out = new File(folder + in.getName());
 		encrypt(in, out);
 		
+		//calculate the hash value
 		MessageDigest md = MessageDigest.getInstance("MD5");
 		DigestInputStream dis = new DigestInputStream(new FileInputStream(in), md);
 		File encryptedHash = new File(folder + "encryptedHash");
@@ -79,17 +82,18 @@ public class Sender {
 		encrypt(aa, encryptedHash);
 		
 		Socket socket = null;
-//	    String host = "127.0.0.1";
 
 	    socket = new Socket(host, Integer.parseInt(port));
 		
 		DataOutputStream dos = new DataOutputStream(socket.getOutputStream());	
 		
+		//send the data to the receiver
 		dos.writeUTF(out.getName());
 		sendFile(out, dos);
 		sendFile(encryptedHash, dos);
 		sendFile(encryptedKey, dos);
 		
+		//close the streams and the network connections and delete the temporary folders
 		dos.close();
 		socket.close();
 		encryptedKey.delete();
